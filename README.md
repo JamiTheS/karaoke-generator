@@ -2,6 +2,8 @@
 
 A modern, AI-powered Karaoke Generator that transforms any YouTube video into a synchronized karaoke experience. Built with Next.js, Framer Motion, and LRClib.
 
+https://karaoke-generator-pytglq7av-damiens-projects-1d0dd317.vercel.app/
+
 ## ✨ Features
 
 - **🔍 Smart Search**: Instantly find songs via YouTube.
