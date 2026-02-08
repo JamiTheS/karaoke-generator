@@ -121,28 +121,45 @@ function parseLRCToSegments(lrc: string): CaptionSegment[] {
 
 export async function POST(req: NextRequest) {
     try {
-        const { videoId } = await req.json();
-        if (!videoId) {
-            return NextResponse.json({ error: "videoId is required" }, { status: 400 });
+        const { videoId, searchQuery: userQuery, duration: userDuration } = await req.json();
+
+        let title = "";
+        let lengthSeconds = 0;
+        let artist = "";
+        let trackName = "";
+        let searchQuery = "";
+
+        // If we have a direct query (from client-side player), use it
+        if (userQuery) {
+            console.log("[API] Using client-provided metadata:", { userQuery, userDuration });
+            title = userQuery;
+            lengthSeconds = userDuration || 0;
+            const parsed = parseYouTubeTitle(title);
+            artist = parsed.artist;
+            trackName = parsed.trackName;
+            searchQuery = artist ? `${artist} ${trackName}` : title;
+        } else {
+            // Fallback to server-side YTDL (might fail on Vercel)
+            if (!videoId) {
+                return NextResponse.json({ error: "videoId is required if no query provided" }, { status: 400 });
+            }
+
+            // Get video info using ytdl-core
+            const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+            const info = await ytdl.getInfo(videoUrl);
+
+            title = info.videoDetails.title;
+            lengthSeconds = parseInt(info.videoDetails.lengthSeconds, 10);
+
+            // Parse title for search
+            const parsed = parseYouTubeTitle(title);
+            artist = parsed.artist;
+            trackName = parsed.trackName;
+            searchQuery = artist ? `${artist} ${trackName}` : title;
         }
 
-
-
-        // Get video info using ytdl-core
-        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        const info = await ytdl.getInfo(videoUrl);
-
-        const title = info.videoDetails.title;
-        const lengthSeconds = parseInt(info.videoDetails.lengthSeconds, 10);
-
-
-
-        // Parse title for search
-        const { artist, trackName } = parseYouTubeTitle(title);
-
-
         // Search LRClib for lyrics
-        const searchQuery = artist ? `${artist} ${trackName}` : title;
+
 
 
         const results = await searchLRClib(searchQuery);

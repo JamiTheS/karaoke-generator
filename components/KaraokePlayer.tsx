@@ -63,7 +63,8 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
   // Use new simplified useLyrics hook - just pass videoId
   const lyricsFromAPI = useLyrics(
     storedSong ? "" : videoId, // only fetch if no stored song
-    duration
+    duration,
+    title // Pass the title from the YouTube player!
   );
 
   const { lyrics, isLoading, error: lyricsError, trackDuration, rawTitle } = storedSong

@@ -49,7 +49,8 @@ function convertToLyricLines(segments: CaptionSegment[]): LyricLine[] {
 
 export function useLyrics(
   videoId: string,
-  videoDuration: number = 0
+  videoDuration: number = 0,
+  videoTitle?: string
 ): LyricsState {
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -59,6 +60,8 @@ export function useLyrics(
   const [rawTitle, setRawTitle] = useState("");
 
   useEffect(() => {
+    // If we have a videoTitle, we can proceed even if videoId logic alone would wait
+    // But we still need videoId for the request usually, or at least to trigger the effect
     if (!videoId) {
       setIsLoading(false);
       setError("No video ID provided");
@@ -77,7 +80,11 @@ export function useLyrics(
         const response = await fetch("/api/captions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ videoId }),
+          body: JSON.stringify({
+            videoId,
+            searchQuery: videoTitle || undefined,
+            duration: videoDuration || undefined
+          }),
         });
 
         if (cancelled) return;
@@ -93,11 +100,15 @@ export function useLyrics(
         // Set video title
         if (data.videoDetails?.title) {
           setRawTitle(data.videoDetails.title);
+        } else if (videoTitle) {
+          setRawTitle(videoTitle);
         }
 
         // Set duration
         if (data.videoDetails?.lengthSeconds) {
           setTrackDuration(data.videoDetails.lengthSeconds);
+        } else if (videoDuration) {
+          setTrackDuration(videoDuration);
         }
 
         // Check for captions
@@ -134,7 +145,7 @@ export function useLyrics(
     return () => {
       cancelled = true;
     };
-  }, [videoId]);
+  }, [videoId, videoTitle, videoDuration]);
 
   return {
     lyrics,
