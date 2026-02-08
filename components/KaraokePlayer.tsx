@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Share2, Minus, Plus, Timer, Music } from "lucide-react";
+import { ArrowLeft, Share2, Minus, Plus, Timer, Music, Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useYouTubePlayer } from "@/hooks/useYouTubePlayer";
 import { useLyrics, useParsedLyrics } from "@/hooks/useLyrics";
@@ -167,18 +167,13 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
 
   // ... (previous useEffects) ...
 
-  // Auto-start logic: Wait for both Player AND Lyrics to be ready
-  useEffect(() => {
-    if (isReady && !isLoading && !lyricsError && isStarting) {
-      // Everything is ready, let's rock!
-      // Small timeout to ensure the UI is rendered
-      const t = setTimeout(() => {
-        togglePlay(); // This will start the video
-        setIsStarting(false);
-      }, 500);
-      return () => clearTimeout(t);
-    }
-  }, [isReady, isLoading, lyricsError, isStarting, togglePlay]);
+  // Auto-start logic REMOVED: We now wait for user interaction to avoid autoplay issues
+  // But we still track 'isStarting' to show the overlay until they click Start
+
+  const handleStart = useCallback(() => {
+    togglePlay();
+    setIsStarting(false);
+  }, [togglePlay]);
 
   return (
     <div className="fixed inset-0 flex flex-col">
@@ -210,23 +205,52 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
         />
       </div>
 
-      {/* Full screen loading overlay if starting */}
+      {/* Full screen overlay: Loading OR Ready to Start */}
       <AnimatePresence>
-        {(isLoading || !isReady) && isStarting && !displayError && (
+        {isStarting && !displayError && (
           <motion.div
             initial={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md"
+            exit={{ opacity: 0, scale: 1.1, filter: "blur(10px)" }}
+            transition={{ duration: 0.5 }}
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-xl"
           >
-            <div className="relative">
-              <div className="w-16 h-16 border-4 border-white/20 border-t-primary rounded-full animate-spin" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Music className="w-6 h-6 text-white/50" />
+            {isLoading || !isReady ? (
+              // Loading State
+              <div className="flex flex-col items-center">
+                <div className="relative mb-8">
+                  <div className="w-20 h-20 border-4 border-white/10 border-t-primary rounded-full animate-spin" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Music className="w-8 h-8 text-white/50" />
+                  </div>
+                </div>
+                <p className="text-white text-xl font-medium animate-pulse">
+                  Syncing lyrics & audio...
+                </p>
               </div>
-            </div>
-            <p className="mt-6 text-white text-lg font-medium animate-pulse">
-              Syncing lyrics & audio...
-            </p>
+            ) : (
+              // Ready State - Manual Start Button
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="flex flex-col items-center"
+              >
+                <div className="mb-8 text-center space-y-2">
+                  <h2 className="text-3xl font-bold text-white">Ready to Sing?</h2>
+                  <p className="text-white/60 text-lg">{displayTitle}</p>
+                </div>
+
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleStart}
+                  className="group relative px-8 py-4 bg-white text-black rounded-full font-bold text-xl shadow-[0_0_50px_-12px_rgba(255,255,255,0.5)] hover:shadow-[0_0_50px_-6px_rgba(255,255,255,0.7)] transition-all flex items-center gap-3"
+                >
+                  <Play className="w-6 h-6 fill-current" />
+                  <span>Start Karaoke</span>
+                  <div className="absolute inset-0 rounded-full ring-2 ring-white/50 animate-ping opacity-50" />
+                </motion.button>
+              </motion.div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
