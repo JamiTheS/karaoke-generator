@@ -243,8 +243,8 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
                   <motion.button
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    onClick={() => setForceShowStart(true)}
-                    className="mt-4 text-sm text-white/40 hover:text-white underline"
+                    onClick={handleStart}
+                    className="mt-4 text-sm text-white/40 hover:text-white underline cursor-pointer"
                   >
                     Taking too long? Click here to start anyway
                   </motion.button>
@@ -385,7 +385,7 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
       <LyricsDisplay
         currentLine={currentLine}
         nextLine={nextLine}
-        isLoading={!displayError && (!isReady || isLoading)}
+        isLoading={!displayError && isLoading}
         error={displayError}
       />
 
