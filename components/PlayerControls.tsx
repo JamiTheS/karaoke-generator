@@ -10,6 +10,7 @@ interface PlayerControlsProps {
   duration: number;
   volume: number;
   syncOffsetMs: number;
+  firstLyricTime: number;
   onTogglePlay: () => void;
   onSeek: (time: number) => void;
   onVolumeChange: (volume: number) => void;
@@ -28,12 +29,14 @@ export default function PlayerControls({
   duration,
   volume,
   syncOffsetMs,
+  firstLyricTime,
   onTogglePlay,
   onSeek,
   onVolumeChange,
   onSyncOffsetChange,
 }: PlayerControlsProps) {
   const [showSyncPanel, setShowSyncPanel] = useState(false);
+  const [tapSyncMode, setTapSyncMode] = useState<'idle' | 'waiting' | 'done'>('idle');
 
   // Format offset for display
   const formatOffset = (ms: number) => {
@@ -115,6 +118,48 @@ export default function PlayerControls({
                   <span>+2.5s</span>
                   <span>+5s</span>
                 </div>
+              </div>
+
+              {/* Instructions */}
+              <div className="text-xs text-white/50 text-center mt-2 space-y-1">
+                <p>🎵 Paroles en <span className="text-violet-400">avance</span> → glissez vers la droite</p>
+                <p>🎵 Paroles en <span className="text-fuchsia-400">retard</span> → glissez vers la gauche</p>
+              </div>
+
+              {/* Tap to Sync */}
+              <div className="mt-3 pt-3 border-t border-white/10">
+                {tapSyncMode === 'idle' && (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setTapSyncMode('waiting')}
+                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-medium text-sm hover:from-violet-500 hover:to-fuchsia-500 transition-all cursor-pointer shadow-lg shadow-violet-500/20"
+                  >
+                    🎤 Caler automatiquement
+                  </motion.button>
+                )}
+                {tapSyncMode === 'waiting' && (
+                  <motion.button
+                    initial={{ scale: 0.95 }}
+                    animate={{ scale: [1, 1.02, 1] }}
+                    transition={{ repeat: Infinity, duration: 1.5 }}
+                    onClick={() => {
+                      // If user taps AFTER firstLyricTime, lyrics are early -> need negative offset to delay them
+                      const offsetMs = Math.round((firstLyricTime - currentTime) * 1000);
+                      onSyncOffsetChange(offsetMs);
+                      setTapSyncMode('done');
+                      setTimeout(() => setTapSyncMode('idle'), 2000);
+                    }}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 text-white font-medium text-sm animate-pulse cursor-pointer"
+                  >
+                    👆 Tapez quand vous entendez le 1er mot !
+                  </motion.button>
+                )}
+                {tapSyncMode === 'done' && (
+                  <div className="w-full py-2.5 rounded-xl bg-green-600/20 text-green-400 font-medium text-sm text-center">
+                    ✓ Synchronisé !
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
@@ -199,8 +244,8 @@ export default function PlayerControls({
                 whileTap={{ scale: 0.9 }}
                 onClick={() => setShowSyncPanel(!showSyncPanel)}
                 className={`p-1.5 rounded-lg transition-colors cursor-pointer ${showSyncPanel
-                    ? "text-violet-400 bg-violet-500/20"
-                    : "text-white/50 hover:text-white"
+                  ? "text-violet-400 bg-violet-500/20"
+                  : "text-white/50 hover:text-white"
                   }`}
                 aria-label="Sync lyrics"
               >

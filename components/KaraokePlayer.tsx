@@ -373,6 +373,7 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
         duration={duration}
         volume={volume}
         syncOffsetMs={manualOffsetMs}
+        firstLyricTime={lyrics.length > 0 ? lyrics[0].time : 0}
         onTogglePlay={togglePlay}
         onSeek={seek}
         onVolumeChange={setVolume}
