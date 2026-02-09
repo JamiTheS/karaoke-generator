@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import ytdl from "@distube/ytdl-core";
+import { parseYouTubeTitle } from "@/lib/youtube";
 
 interface CaptionSegment {
     startMs: number;
@@ -14,36 +15,7 @@ interface LRClibResult {
     artistName: string;
 }
 
-// Parse YouTube title into artist and track name
-function parseYouTubeTitle(title: string): { artist: string; trackName: string } {
-    // Remove common suffixes
-    let cleanTitle = title
-        .replace(/\s*\(Official\s*(Music\s*)?Video\)/gi, "")
-        .replace(/\s*\(Official\s*Audio\)/gi, "")
-        .replace(/\s*\(Lyric\s*Video\)/gi, "")
-        .replace(/\s*\(Lyrics\)/gi, "")
-        .replace(/\s*\[Official\s*(Music\s*)?Video\]/gi, "")
-        .replace(/\s*\(4K\s*Remaster\)/gi, "")
-        .replace(/\s*\(HD\)/gi, "")
-        .replace(/\s*ft\.?\s+/gi, " feat. ")
-        .trim();
-
-    // Try to split by common separators
-    const separators = [" - ", " – ", " — ", " | "];
-    for (const sep of separators) {
-        if (cleanTitle.includes(sep)) {
-            const parts = cleanTitle.split(sep);
-            if (parts.length >= 2) {
-                return {
-                    artist: parts[0].trim(),
-                    trackName: parts.slice(1).join(sep).trim(),
-                };
-            }
-        }
-    }
-
-    return { artist: "", trackName: cleanTitle };
-}
+// parseYouTubeTitle is imported from @/lib/youtube
 
 // Search LRClib for synced lyrics
 async function searchLRClib(query: string): Promise<LRClibResult[]> {
@@ -123,11 +95,29 @@ export async function POST(req: NextRequest) {
     try {
         const { videoId, searchQuery: userQuery, duration: userDuration } = await req.json();
 
+        // Input validation
+        const videoIdRegex = /^[a-zA-Z0-9_-]{11}$/;
+        if (videoId && !videoIdRegex.test(videoId)) {
+            return NextResponse.json(
+                { error: "Invalid videoId format" },
+                { status: 400 }
+            );
+        }
+
+        if (userQuery && (typeof userQuery !== "string" || userQuery.length > 300)) {
+            return NextResponse.json(
+                { error: "Invalid or too long searchQuery" },
+                { status: 400 }
+            );
+        }
+
         let title = "";
         let lengthSeconds = 0;
         let artist = "";
         let trackName = "";
         let searchQuery = "";
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let youtubeCaptions: any = null;
 
         // If we have a direct query (from client-side player), use it
         if (userQuery) {
@@ -156,6 +146,30 @@ export async function POST(req: NextRequest) {
             artist = parsed.artist;
             trackName = parsed.trackName;
             searchQuery = artist ? `${artist} ${trackName}` : title;
+
+            // Try to get YouTube captions for calibration
+            try {
+                const playerResponse = info.player_response;
+                if (playerResponse && playerResponse.captions && playerResponse.captions.playerCaptionsTracklistRenderer) {
+                    const tracks = playerResponse.captions.playerCaptionsTracklistRenderer.captionTracks;
+                    if (tracks && tracks.length > 0) {
+                        // Prefer English or auto-generated
+                        // Sort by probability of being useful? Just take the first one usually works.
+                        // Ideally find 'en'
+                         
+                        const track = tracks.find((t: { languageCode: string }) => t.languageCode === 'en') || tracks[0];
+                        if (track && track.baseUrl) {
+                            const captionResponse = await fetch(`${track.baseUrl}&fmt=json3`);
+                            if (captionResponse.ok) {
+                                const captionJson = await captionResponse.json();
+                                youtubeCaptions = captionJson;
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("[API] Failed to fetch YouTube captions:", e);
+            }
         }
 
         // Search LRClib for lyrics
@@ -201,6 +215,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
             videoDetails: { title, lengthSeconds },
             captions: segments,
+            youtubeCaptions: youtubeCaptions,
             lrcMatch: {
                 artist: bestMatch.artistName,
                 track: bestMatch.trackName,

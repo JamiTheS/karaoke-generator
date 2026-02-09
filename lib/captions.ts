@@ -26,7 +26,7 @@ export async function fetchYouTubeCaptions(
     if (!response.ok) return [];
 
     const captionData = await response.json();
-    const events = captionData?.events;
+    const events = captionData?.youtubeCaptions?.events || captionData?.events;
 
     if (!Array.isArray(events)) return [];
 

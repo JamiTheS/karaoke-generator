@@ -22,6 +22,13 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  if (query.length > 200) {
+    return NextResponse.json(
+      { error: "Query too long (max 200 characters)" },
+      { status: 400 }
+    );
+  }
+
   try {
     const results = await scrapeYouTubeSearch(query.trim());
     return NextResponse.json(results);

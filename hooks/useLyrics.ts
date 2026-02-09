@@ -203,7 +203,7 @@ export function useParsedLyrics(
           }));
 
           // Calculate endTime from next line or estimate
-          let endTime = time + text.length * 0.1; // Rough estimate
+          const endTime = time + text.length * 0.1; // Rough estimate
 
           parsed.push({
             time,

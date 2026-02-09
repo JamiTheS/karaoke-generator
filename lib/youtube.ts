@@ -38,6 +38,10 @@ export function parseYouTubeTitle(rawTitle: string): VideoMetadata {
     .replace(/\s*\[Audio\]/gi, "")
     .replace(/\s*\(HD\)/gi, "")
     .replace(/\s*\(HQ\)/gi, "")
+    .replace(/\s*\(4K\s*Remaster\)/gi, "")
+    .replace(/\s*\(Clip\s*Officiel\)/gi, "")  // French
+    .replace(/\s*\(Clip\s*Video\)/gi, "")      // French
+    .replace(/\s*\(Video\s*Clip\)/gi, "")      // French
     .replace(/\s*ft\.?\s*.+$/gi, "")
     .replace(/\s*feat\.?\s*.+$/gi, "")
     .trim();
