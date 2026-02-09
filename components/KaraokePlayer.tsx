@@ -170,6 +170,17 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
 
   // Auto-start logic REMOVED: We now wait for user interaction to avoid autoplay issues
   // But we still track 'isStarting' to show the overlay until they click Start
+  const [forceShowStart, setForceShowStart] = useState(false);
+
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+    if (isStarting && (isLoading || !isReady)) {
+      timeout = setTimeout(() => {
+        setForceShowStart(true);
+      }, 5000); // after 5s, show start button anyway
+    }
+    return () => clearTimeout(timeout);
+  }, [isStarting, isLoading, isReady]);
 
   const handleStart = useCallback(() => {
     togglePlay();
@@ -215,7 +226,7 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
             transition={{ duration: 0.5 }}
             className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-xl"
           >
-            {isLoading || !isReady ? (
+            {isLoading || (!isReady && !forceShowStart) ? (
               // Loading State
               <div className="flex flex-col items-center">
                 <div className="relative mb-8">
@@ -225,8 +236,19 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
                   </div>
                 </div>
                 <p className="text-white text-xl font-medium animate-pulse">
-                  Syncing lyrics & audio...
+                  {isLoading ? "Syncing lyrics & audio..." : "Initializing player..."}
                 </p>
+                {/* Fallback message after 5s */}
+                {forceShowStart && (
+                  <motion.button
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    onClick={() => setForceShowStart(true)}
+                    className="mt-4 text-sm text-white/40 hover:text-white underline"
+                  >
+                    Taking too long? Click here to start anyway
+                  </motion.button>
+                )}
               </div>
             ) : (
               // Ready State - Manual Start Button
@@ -238,6 +260,7 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
                 <div className="mb-8 text-center space-y-2">
                   <h2 className="text-3xl font-bold text-white">Ready to Sing?</h2>
                   <p className="text-white/60 text-lg">{displayTitle}</p>
+                  {isLoading && <p className="text-yellow-400/80 text-sm">(Lyrics still loading...)</p>}
                 </div>
 
                 <motion.button

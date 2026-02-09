@@ -77,6 +77,10 @@ export function useLyrics(
       setLyrics([]);
 
       try {
+        // Create a controller to abort if request takes too long (e.g. 15s)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
         const response = await fetch("/api/captions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -85,7 +89,10 @@ export function useLyrics(
             searchQuery: videoTitle || undefined,
             duration: videoDuration || undefined
           }),
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         if (cancelled) return;
 
