@@ -372,9 +372,11 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
         currentTime={currentTime}
         duration={duration}
         volume={volume}
+        syncOffsetMs={manualOffsetMs}
         onTogglePlay={togglePlay}
         onSeek={seek}
         onVolumeChange={setVolume}
+        onSyncOffsetChange={setManualOffsetMs}
       />
     </div>
   );
