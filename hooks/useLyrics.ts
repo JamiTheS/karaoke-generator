@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { LyricLine, LyricsState, LyricWord } from "@/types";
+import { useState, useEffect, useRef } from "react";
+import { LyricLine, LyricsState, LyricWord, YouTubeCaptionEvent } from "@/types";
 
 interface CaptionSegment {
   startMs: number;
@@ -15,6 +15,9 @@ interface APIResponse {
     lengthSeconds: number;
   };
   captions?: CaptionSegment[];
+  youtubeCaptions?: {
+    events?: YouTubeCaptionEvent[];
+  };
   lrcMatch?: {
     artist: string;
     track: string;
@@ -22,13 +25,11 @@ interface APIResponse {
   error?: string;
 }
 
-// Convert API caption segments to LyricLine format
 function convertToLyricLines(segments: CaptionSegment[]): LyricLine[] {
   return segments.map((seg) => {
     const startTime = seg.startMs / 1000;
     const endTime = (seg.startMs + seg.durationMs) / 1000;
 
-    // Split text into words for word-by-word highlighting
     const wordTexts = seg.text.split(/\s+/).filter(w => w.length > 0);
     const wordDuration = seg.durationMs / Math.max(wordTexts.length, 1);
 
@@ -53,31 +54,36 @@ export function useLyrics(
   videoTitle?: string
 ): LyricsState {
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(!!videoId);
+  const [error, setError] = useState<string | null>(videoId ? null : "No video ID provided");
   const [lrcDuration, setLrcDuration] = useState(0);
   const [trackDuration, setTrackDuration] = useState(0);
   const [rawTitle, setRawTitle] = useState("");
+  const [youtubeCaptionEvents, setYoutubeCaptionEvents] = useState<YouTubeCaptionEvent[]>([]);
+
+  // Track if we've already successfully loaded lyrics to avoid re-fetching
+  const hasLoadedRef = useRef(false);
+  // Track the last fetch key to avoid redundant calls
+  const lastFetchRef = useRef<string>("");
 
   useEffect(() => {
-    // If we have a videoTitle, we can proceed even if videoId logic alone would wait
-    // But we still need videoId for the request usually, or at least to trigger the effect
-    if (!videoId) {
-      setIsLoading(false);
-      setError("No video ID provided");
-      return;
-    }
+    if (!videoId) return;
+
+    // Don't re-fetch if we already have lyrics
+    if (hasLoadedRef.current) return;
+
+    // Build a stable fetch key to avoid redundant calls
+    const fetchKey = `${videoId}:${videoTitle || ""}:${videoDuration}`;
+    if (fetchKey === lastFetchRef.current) return;
+    lastFetchRef.current = fetchKey;
 
     let cancelled = false;
 
     async function loadLyrics() {
-
       setIsLoading(true);
       setError(null);
-      setLyrics([]);
 
       try {
-        // Create a controller to abort if request takes too long (e.g. 15s)
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
 
@@ -87,13 +93,12 @@ export function useLyrics(
           body: JSON.stringify({
             videoId,
             searchQuery: videoTitle || undefined,
-            duration: videoDuration || undefined
+            duration: videoDuration || undefined,
           }),
           signal: controller.signal,
         });
 
         clearTimeout(timeoutId);
-
         if (cancelled) return;
 
         const data: APIResponse = await response.json();
@@ -104,45 +109,46 @@ export function useLyrics(
           return;
         }
 
-        // Set video title
         if (data.videoDetails?.title) {
           setRawTitle(data.videoDetails.title);
         } else if (videoTitle) {
           setRawTitle(videoTitle);
         }
 
-        // Set duration
         if (data.videoDetails?.lengthSeconds) {
           setTrackDuration(data.videoDetails.lengthSeconds);
         } else if (videoDuration) {
           setTrackDuration(videoDuration);
         }
 
-        // Check for captions
+        // Store YouTube caption events for auto-calibration
+        if (data.youtubeCaptions?.events) {
+          setYoutubeCaptionEvents(data.youtubeCaptions.events);
+        }
+
         if (!data.captions || data.captions.length === 0) {
           setError(data.error || "No synchronized lyrics found for this song");
           setIsLoading(false);
           return;
         }
 
-        // Convert to LyricLine format
         const lyricLines = convertToLyricLines(data.captions);
 
-
-
-        // Calculate LRC duration from last segment
         if (lyricLines.length > 0) {
           const lastLine = lyricLines[lyricLines.length - 1];
-          setLrcDuration(lastLine.endTime + 5); // Add 5 seconds buffer
+          setLrcDuration(lastLine.endTime + 5);
         }
 
         setLyrics(lyricLines);
         setIsLoading(false);
-
+        hasLoadedRef.current = true;
       } catch (err) {
         if (cancelled) return;
-        console.error("[useLyrics] Error:", err);
-        setError("Failed to load lyrics. Please try again.");
+        if (err instanceof DOMException && err.name === "AbortError") {
+          setError("Request timed out. Please try again.");
+        } else {
+          setError("Failed to load lyrics. Please try again.");
+        }
         setIsLoading(false);
       }
     }
@@ -161,70 +167,64 @@ export function useLyrics(
     rawTitle,
     lrcDuration,
     trackDuration,
+    youtubeCaptionEvents,
   };
 }
 
-// Keep useParsedLyrics for backward compatibility with stored songs
+// Parse stored LRC lyrics into LyricLine format
 export function useParsedLyrics(
   syncedLyrics: string | null,
   trackDuration: number
 ): LyricsState {
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(!!syncedLyrics);
+  const [error, setError] = useState<string | null>(syncedLyrics ? null : "No synchronized lyrics provided.");
   const [lrcDuration, setLrcDuration] = useState(0);
 
   useEffect(() => {
-    if (!syncedLyrics) {
-      setIsLoading(false);
-      setError("No synchronized lyrics provided.");
-      return;
-    }
+    if (!syncedLyrics) return;
 
-    // Parse LRC format
     const lines = syncedLyrics.split("\n");
     const parsed: LyricLine[] = [];
     const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/;
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+    for (const line of lines) {
       const match = timeRegex.exec(line);
-      if (match) {
-        const minutes = parseInt(match[1], 10);
-        const seconds = parseInt(match[2], 10);
-        const ms = match[3].length === 2
-          ? parseInt(match[3], 10) * 10
-          : parseInt(match[3], 10);
+      if (!match) continue;
 
-        const time = minutes * 60 + seconds + ms / 1000;
-        const text = line.replace(timeRegex, "").trim();
+      const minutes = parseInt(match[1], 10);
+      const seconds = parseInt(match[2], 10);
+      const ms = match[3].length === 2
+        ? parseInt(match[3], 10) * 10
+        : parseInt(match[3], 10);
 
-        if (text) {
-          const wordTexts = text.split(/\s+/).filter(w => w.length > 0);
-          const wordDuration = 0.3; // Approximate word duration
+      const time = minutes * 60 + seconds + ms / 1000;
+      const text = line.replace(timeRegex, "").trim();
 
-          const words: LyricWord[] = wordTexts.map((t, j) => ({
-            text: t,
-            startTime: time + j * wordDuration,
-            endTime: time + (j + 1) * wordDuration,
-          }));
-
-          // Calculate endTime from next line or estimate
-          const endTime = time + text.length * 0.1; // Rough estimate
-
-          parsed.push({
-            time,
-            endTime,
-            text,
-            words,
-          });
-        }
+      if (text) {
+        parsed.push({
+          time,
+          endTime: 0,
+          text,
+          words: [],
+        });
       }
     }
 
-    // Update endTime based on next line's startTime
-    for (let i = 0; i < parsed.length - 1; i++) {
-      parsed[i].endTime = parsed[i + 1].time;
+    // Calculate endTime and word timing from next line's start time
+    for (let i = 0; i < parsed.length; i++) {
+      const nextTime = i + 1 < parsed.length ? parsed[i + 1].time : parsed[i].time + 4;
+      parsed[i].endTime = nextTime;
+
+      const wordTexts = parsed[i].text.split(/\s+/).filter(w => w.length > 0);
+      const lineDuration = parsed[i].endTime - parsed[i].time;
+      const wordDuration = lineDuration / Math.max(wordTexts.length, 1);
+
+      parsed[i].words = wordTexts.map((t, j) => ({
+        text: t,
+        startTime: parsed[i].time + j * wordDuration,
+        endTime: parsed[i].time + (j + 1) * wordDuration,
+      }));
     }
 
     if (parsed.length === 0) {
@@ -246,5 +246,6 @@ export function useParsedLyrics(
     rawTitle: "",
     lrcDuration,
     trackDuration,
+    youtubeCaptionEvents: [],
   };
 }

@@ -21,11 +21,10 @@ interface KaraokePlayerProps {
 }
 
 export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
-
   const router = useRouter();
   const [manualOffsetMs, setManualOffsetMs] = useState(0);
   const [showOffset, setShowOffset] = useState(false);
-  const [playerTimeout, setPlayerTimeout] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
 
   // Check if we have pre-fetched song data from the search flow
   const storedSong = useMemo(() => getSelectedSong(), []);
@@ -41,18 +40,11 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
     onStateChange,
     onError,
     togglePlay,
+    play,
     seek,
     getCurrentTime,
     setVolume,
   } = useYouTubePlayer();
-
-  // Safety timeout: if player is not ready after 12s, show error
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!isReady) setPlayerTimeout(true);
-    }, 12000);
-    return () => clearTimeout(timer);
-  }, [isReady]);
 
   // Dual lyrics source: use pre-fetched lyrics if available, else fetch from API
   const lyricsFromStore = useParsedLyrics(
@@ -60,18 +52,14 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
     storedSong?.duration ?? 0
   );
 
-  // Use new simplified useLyrics hook - just pass videoId
   const lyricsFromAPI = useLyrics(
-    storedSong ? "" : videoId, // only fetch if no stored song
+    storedSong ? "" : videoId,
     duration,
-    title // Pass the title from the YouTube player!
+    title
   );
 
-  const { lyrics, isLoading, error: lyricsError, trackDuration, rawTitle } = storedSong
-    ? lyricsFromStore
-    : lyricsFromAPI;
-
-
+  const lyricsState = storedSong ? lyricsFromStore : lyricsFromAPI;
+  const { lyrics, isLoading, error: lyricsError, trackDuration, youtubeCaptionEvents } = lyricsState;
 
   // Display title: prefer stored song info, fallback to YouTube title
   const displayTitle = storedSong
@@ -79,29 +67,26 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
     : title;
 
   // Combine errors: player errors take priority
-  const displayError =
-    playerError ||
-    (playerTimeout && !isReady
-      ? "Video could not be loaded. Please check the URL and try again."
-      : null) ||
-    lyricsError;
+  const displayError = playerError || lyricsError;
 
   const { totalOffsetMs, autoOffsetMs, isCalibrated } = useAutoCalibration(
     lyrics,
     trackDuration,
     duration,
     videoId,
-    manualOffsetMs
+    manualOffsetMs,
+    youtubeCaptionEvents
   );
 
-  const { currentLine, nextLine, currentTime, activeWordIndex, syncedTime } =
+  // Single useLyricsSync call - provides data for both display AND background
+  const { currentLine, nextLine, currentLineIndex, currentTime } =
     useLyricsSync(lyrics, getCurrentTime, isPlaying, totalOffsetMs);
 
   const handleShare = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
     } catch {
-      // Fallback
+      // Ignore
     }
   }, []);
 
@@ -153,49 +138,28 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
 
     window.addEventListener("keydown", handleKeyPress);
     return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [
-    togglePlay,
-    seek,
-    setVolume,
-    adjustOffset,
-    currentTime,
-    duration,
-    volume,
-  ]);
+  }, [togglePlay, seek, setVolume, adjustOffset, currentTime, duration, volume]);
 
-  // State to manage the start-up sequence
-  const [isStarting, setIsStarting] = useState(true);
+  // Show overlay until user clicks start; ready when player is ready
+  const showOverlay = !hasStarted && !displayError;
+  const canStart = isReady;
 
-  // ... (previous useEffects) ...
-
-  // Auto-start logic REMOVED: We now wait for user interaction to avoid autoplay issues
-  // But we still track 'isStarting' to show the overlay until they click Start
-  const [forceShowStart, setForceShowStart] = useState(false);
-
-  useEffect(() => {
-    let timeout: NodeJS.Timeout;
-    if (isStarting && (isLoading || !isReady)) {
-      timeout = setTimeout(() => {
-        setForceShowStart(true);
-      }, 5000); // after 5s, show start button anyway
-    }
-    return () => clearTimeout(timeout);
-  }, [isStarting, isLoading, isReady]);
-
+  // Use synchronous play() instead of async togglePlay() to preserve
+  // the user gesture chain on mobile (required for autoplay policy)
   const handleStart = useCallback(() => {
-    togglePlay();
-    setIsStarting(false);
-  }, [togglePlay]);
+    setHasStarted(true);
+    play();
+  }, [play]);
 
   return (
     <div className="fixed inset-0 flex flex-col">
       <BackgroundGradient
         videoId={videoId}
-        currentLineIndex={useLyricsSync(lyrics, getCurrentTime, isPlaying, totalOffsetMs).currentLineIndex}
+        currentLineIndex={currentLineIndex}
         isPlaying={isPlaying}
       />
 
-      {/* Hidden YouTube Player - Autoplay DISABLED */}
+      {/* Hidden YouTube Player */}
       <div className="absolute -top-[9999px] -left-[9999px]">
         <YouTube
           videoId={videoId}
@@ -203,7 +167,7 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
             height: "1",
             width: "1",
             playerVars: {
-              autoplay: 0, // IMPORTANT: We control the start manually
+              autoplay: 0,
               controls: 0,
               disablekb: 1,
               modestbranding: 1,
@@ -219,15 +183,14 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
 
       {/* Full screen overlay: Loading OR Ready to Start */}
       <AnimatePresence>
-        {isStarting && !displayError && (
+        {showOverlay && (
           <motion.div
             initial={{ opacity: 1 }}
             exit={{ opacity: 0, scale: 1.1, filter: "blur(10px)" }}
             transition={{ duration: 0.5 }}
             className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-xl"
           >
-            {isLoading || (!isReady && !forceShowStart) ? (
-              // Loading State
+            {!canStart ? (
               <div className="flex flex-col items-center">
                 <div className="relative mb-8">
                   <div className="w-20 h-20 border-4 border-white/10 border-t-primary rounded-full animate-spin" />
@@ -236,22 +199,10 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
                   </div>
                 </div>
                 <p className="text-white text-xl font-medium animate-pulse">
-                  {isLoading ? "Syncing lyrics & audio..." : "Initializing player..."}
+                  Initializing player...
                 </p>
-                {/* Fallback message after 5s */}
-                {forceShowStart && (
-                  <motion.button
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    onClick={handleStart}
-                    className="mt-4 text-sm text-white/40 hover:text-white underline cursor-pointer"
-                  >
-                    Taking too long? Click here to start anyway
-                  </motion.button>
-                )}
               </div>
             ) : (
-              // Ready State - Manual Start Button
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -259,8 +210,12 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
               >
                 <div className="mb-8 text-center space-y-2">
                   <h2 className="text-3xl font-bold text-white">Ready to Sing?</h2>
-                  <p className="text-white/60 text-lg">{displayTitle}</p>
-                  {isLoading && <p className="text-yellow-400/80 text-sm">(Lyrics still loading...)</p>}
+                  {displayTitle && (
+                    <p className="text-white/60 text-lg">{displayTitle}</p>
+                  )}
+                  {isLoading && (
+                    <p className="text-yellow-400/80 text-sm">(Lyrics still loading...)</p>
+                  )}
                 </div>
 
                 <motion.button
@@ -278,7 +233,6 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
           </motion.div>
         )}
       </AnimatePresence>
-
 
       {/* Header */}
       <motion.header
@@ -311,8 +265,9 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => setShowOffset((v) => !v)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl glass text-sm cursor-pointer transition-colors ${showOffset ? "text-accent" : "text-white/70 hover:text-white"
-              }`}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl glass text-sm cursor-pointer transition-colors ${
+              showOffset ? "text-accent" : "text-white/70 hover:text-white"
+            }`}
             aria-label="Adjust lyrics timing"
             title="Adjust lyrics timing (keyboard: [ and ])"
           >

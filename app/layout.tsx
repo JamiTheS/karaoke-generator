@@ -1,17 +1,11 @@
-import type { Metadata } from "next";
-import { Instrument_Serif, Inter } from "next/font/google";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
-const instrumentSerif = Instrument_Serif({
-  weight: "400",
-  variable: "--font-serif",
-  subsets: ["latin"],
-});
-
-const inter = Inter({
-  variable: "--font-sans",
-  subsets: ["latin"],
-});
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   title: "Instant Karaoke - Sing Any Song",
@@ -31,7 +25,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${instrumentSerif.variable} ${inter.variable} antialiased`}>{children}</body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

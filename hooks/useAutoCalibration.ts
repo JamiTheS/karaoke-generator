@@ -1,21 +1,57 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
-import { LyricLine } from "@/types";
-import {
-  fetchYouTubeCaptions,
-  findFirstVocalTimestamp,
-  CaptionSegment,
-} from "@/lib/captions";
+import { useMemo } from "react";
+import { LyricLine, YouTubeCaptionEvent } from "@/types";
+
+interface CaptionSegment {
+  startMs: number;
+  text: string;
+}
+
+/**
+ * Parse YouTube caption events into simple caption segments for calibration.
+ */
+function parseYouTubeCaptionEvents(events: YouTubeCaptionEvent[]): CaptionSegment[] {
+  return events
+    .filter((e) => e.segs && e.segs.length > 0)
+    .map((e) => ({
+      startMs: e.tStartMs || 0,
+      text: e.segs!.map((s) => s.utf8).join("").trim(),
+    }))
+    .filter((s) => s.text.length > 0 && s.text !== "\n");
+}
+
+/**
+ * Find when singing actually starts in the video by looking at captions.
+ * Skips non-lyric captions like "[Music]", "[Applause]", etc.
+ */
+function findFirstVocalTimestamp(captions: CaptionSegment[]): number | null {
+  if (captions.length === 0) return null;
+
+  for (const caption of captions) {
+    const text = caption.text.toLowerCase().trim();
+    if (
+      text.startsWith("[") ||
+      text.startsWith("(") ||
+      text === "music" ||
+      text === "applause" ||
+      text.length < 2
+    ) {
+      continue;
+    }
+    return caption.startMs / 1000;
+  }
+
+  return captions[0].startMs / 1000;
+}
 
 /**
  * Auto-calibrate lyrics offset using a two-layer approach:
  *
  * Layer 1 (primary): YouTube captions anchoring
- * - Fetch auto-generated captions from YouTube
+ * - Use YouTube caption events (already fetched by useLyrics)
  * - Find when the first vocal line starts in the video
  * - Compare with the first LRC lyric timestamp
- * - The difference is the exact offset
  *
  * Layer 2 (fallback): Duration comparison
  * - Compare LRClib trackDuration with YouTube videoDuration
@@ -25,39 +61,24 @@ export function useAutoCalibration(
   lyrics: LyricLine[],
   trackDuration: number,
   videoDuration: number,
-  videoId: string,
-  manualOffsetMs: number
+  _videoId: string,
+  manualOffsetMs: number,
+  youtubeCaptionEvents: YouTubeCaptionEvent[] = []
 ): { totalOffsetMs: number; autoOffsetMs: number; isCalibrated: boolean } {
-  const [captions, setCaptions] = useState<CaptionSegment[]>([]);
-  const [captionsFetched, setCaptionsFetched] = useState(false);
-
-  // Fetch YouTube captions once we have a videoId
-  useEffect(() => {
-    if (!videoId || captionsFetched) return;
-
-    fetchYouTubeCaptions(videoId).then((caps) => {
-      setCaptions(caps);
-      setCaptionsFetched(true);
-    });
-  }, [videoId, captionsFetched]);
-
   const { autoOffsetMs, isCalibrated } = useMemo(() => {
     if (lyrics.length === 0 || videoDuration <= 0) {
       return { autoOffsetMs: 0, isCalibrated: false };
     }
 
     // Layer 1: Caption-based anchoring
-    if (captions.length > 0) {
+    if (youtubeCaptionEvents.length > 0) {
+      const captions = parseYouTubeCaptionEvents(youtubeCaptionEvents);
       const firstVocalInVideo = findFirstVocalTimestamp(captions);
       const firstLyricTime = lyrics[0].time;
 
       if (firstVocalInVideo !== null && firstLyricTime >= 0) {
-        // The offset is how much later the vocal starts in the video
-        // vs when the LRC says it should start.
-        // Negative offset = lyrics need to appear later
         const offsetSeconds = firstLyricTime - firstVocalInVideo;
         const offsetMs = Math.round(offsetSeconds * 1000);
-
         return { autoOffsetMs: offsetMs, isCalibrated: true };
       }
     }
@@ -65,7 +86,6 @@ export function useAutoCalibration(
     // Layer 2: Duration-based fallback
     if (trackDuration > 0) {
       const diffSeconds = videoDuration - trackDuration;
-
       if (diffSeconds > 1) {
         const introSeconds = Math.max(0, diffSeconds - 0.5);
         return {
@@ -76,7 +96,7 @@ export function useAutoCalibration(
     }
 
     return { autoOffsetMs: 0, isCalibrated: true };
-  }, [lyrics, trackDuration, videoDuration, captions]);
+  }, [lyrics, trackDuration, videoDuration, youtubeCaptionEvents]);
 
   return {
     totalOffsetMs: autoOffsetMs + manualOffsetMs,

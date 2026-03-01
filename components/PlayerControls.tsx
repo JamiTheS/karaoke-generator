@@ -46,7 +46,7 @@ export default function PlayerControls({
   };
 
   return (
-    <div className="fixed bottom-8 left-0 right-0 z-50 flex flex-col items-center px-4 gap-3">
+    <div className="fixed bottom-4 sm:bottom-8 left-0 right-0 z-50 flex flex-col items-center px-3 sm:px-4 gap-3 pb-[env(safe-area-inset-bottom)]">
       {/* Sync Slider Panel */}
       <AnimatePresence>
         {showSyncPanel && (
@@ -175,9 +175,15 @@ export default function PlayerControls({
       >
         <div className="flex flex-col gap-4">
           {/* Progress Bar */}
-          <div className="group relative h-2 w-full cursor-pointer touch-none" onClick={(e) => {
+          <div className="group relative h-6 w-full cursor-pointer flex items-center" onClick={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             const pos = (e.clientX - rect.left) / rect.width;
+            onSeek(pos * duration);
+          }} onTouchEnd={(e) => {
+            const touch = e.changedTouches[0];
+            if (!touch) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const pos = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
             onSeek(pos * duration);
           }}>
             {/* Background Track */}

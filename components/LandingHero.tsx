@@ -3,32 +3,8 @@
 import { useCallback, useRef, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Mic2,
-  Search,
-  Loader2,
-  Music,
-  Clock,
-  X,
-} from "lucide-react";
+import { Search, Music, X } from "lucide-react";
 import { useSongSearch } from "@/hooks/useSongSearch";
-import { setSelectedSong } from "@/lib/song-store";
-import { LrcSearchResult } from "@/types";
-
-const EXAMPLE_QUERIES = [
-  "Despacito",
-  "Bohemian Rhapsody",
-  "Shape of You",
-  "Faded Alan Walker",
-  "Blinding Lights",
-  "Someone Like You",
-];
-
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
 
 export default function LandingHero() {
   const router = useRouter();
@@ -36,12 +12,7 @@ export default function LandingHero() {
   const resultsRef = useRef<HTMLDivElement>(null);
   const [showResults, setShowResults] = useState(false);
 
-  const {
-    query,
-    error,
-    search,
-    directUrlMatch,
-  } = useSongSearch();
+  const { query, error, search, directUrlMatch } = useSongSearch();
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,8 +79,9 @@ export default function LandingHero() {
         {/* Search Input */}
         <div className="relative mb-4">
           <div
-            className={`flex items-center gap-3 rounded-2xl px-5 py-4 transition-all duration-200 glass focus-within:ring-1 focus-within:ring-primary/50 ${showDropdown ? "rounded-b-none" : ""
-              }`}
+            className={`flex items-center gap-3 rounded-2xl px-5 py-4 transition-all duration-200 glass focus-within:ring-1 focus-within:ring-primary/50 ${
+              showDropdown ? "rounded-b-none" : ""
+            }`}
           >
             <Search className="w-5 h-5 text-white/40 shrink-0" />
 
@@ -148,10 +120,7 @@ export default function LandingHero() {
               >
                 {directUrlMatch ? (
                   <button
-                    onClick={() => {
-                      console.log("Navigating to:", `/karaoke/${directUrlMatch}`);
-                      router.push(`/karaoke/${directUrlMatch}`);
-                    }}
+                    onClick={() => router.push(`/karaoke/${directUrlMatch}`)}
                     className="w-full text-left px-5 py-3.5 hover:bg-white/10 transition-colors cursor-pointer flex items-center gap-4 group"
                   >
                     <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center shrink-0 group-hover:bg-red-500/30 transition-colors">
