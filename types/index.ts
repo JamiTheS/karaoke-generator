@@ -31,6 +31,14 @@ export interface LyricsState {
   lrcDuration: number;
   /** Official track duration from LRClib metadata (the source of truth) */
   trackDuration: number;
+  /** YouTube caption events for auto-calibration (avoids duplicate API call) */
+  youtubeCaptionEvents: YouTubeCaptionEvent[];
+}
+
+export interface YouTubeCaptionEvent {
+  tStartMs: number;
+  dDurationMs: number;
+  segs?: { utf8: string }[];
 }
 
 export interface PlayerState {

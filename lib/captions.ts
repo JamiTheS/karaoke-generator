@@ -12,8 +12,7 @@ export interface CaptionSegment {
  * No API key needed.
  */
 export async function fetchYouTubeCaptions(
-  videoId: string,
-  lang: string = "en"
+  videoId: string
 ): Promise<CaptionSegment[]> {
   try {
     const response = await fetch("/api/captions", {

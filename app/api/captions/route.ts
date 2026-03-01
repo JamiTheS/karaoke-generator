@@ -15,9 +15,6 @@ interface LRClibResult {
     artistName: string;
 }
 
-// parseYouTubeTitle is imported from @/lib/youtube
-
-// Search LRClib for synced lyrics
 async function searchLRClib(query: string): Promise<LRClibResult[]> {
     try {
         const response = await fetch(
@@ -41,7 +38,6 @@ async function searchLRClib(query: string): Promise<LRClibResult[]> {
     }
 }
 
-// Pick the best LRC match based on video duration
 function pickBestMatch(candidates: LRClibResult[], videoDuration: number): LRClibResult | null {
     if (candidates.length === 0) return null;
     if (videoDuration <= 0) return candidates[0];
@@ -55,7 +51,6 @@ function pickBestMatch(candidates: LRClibResult[], videoDuration: number): LRCli
     return sorted[0];
 }
 
-// Parse LRC format lyrics into caption segments
 function parseLRCToSegments(lrc: string): CaptionSegment[] {
     const lines = lrc.split("\n");
     const segments: CaptionSegment[] = [];
@@ -76,7 +71,7 @@ function parseLRCToSegments(lrc: string): CaptionSegment[] {
             if (text) {
                 segments.push({
                     startMs,
-                    durationMs: 3000, // Default duration, will be adjusted
+                    durationMs: 3000, // Default, adjusted below
                     text,
                 });
             }
@@ -121,7 +116,6 @@ export async function POST(req: NextRequest) {
 
         // If we have a direct query (from client-side player), use it
         if (userQuery) {
-            console.log("[API] Using client-provided metadata:", { userQuery, userDuration });
             title = userQuery;
             lengthSeconds = userDuration || 0;
             const parsed = parseYouTubeTitle(title);
@@ -134,14 +128,12 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ error: "videoId is required if no query provided" }, { status: 400 });
             }
 
-            // Get video info using ytdl-core
             const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
             const info = await ytdl.getInfo(videoUrl);
 
             title = info.videoDetails.title;
             lengthSeconds = parseInt(info.videoDetails.lengthSeconds, 10);
 
-            // Parse title for search
             const parsed = parseYouTubeTitle(title);
             artist = parsed.artist;
             trackName = parsed.trackName;
@@ -150,82 +142,65 @@ export async function POST(req: NextRequest) {
             // Try to get YouTube captions for calibration
             try {
                 const playerResponse = info.player_response;
-                if (playerResponse && playerResponse.captions && playerResponse.captions.playerCaptionsTracklistRenderer) {
+                if (playerResponse?.captions?.playerCaptionsTracklistRenderer) {
                     const tracks = playerResponse.captions.playerCaptionsTracklistRenderer.captionTracks;
                     if (tracks && tracks.length > 0) {
-                        // Prefer English or auto-generated
-                        // Sort by probability of being useful? Just take the first one usually works.
-                        // Ideally find 'en'
-                         
                         const track = tracks.find((t: { languageCode: string }) => t.languageCode === 'en') || tracks[0];
-                        if (track && track.baseUrl) {
+                        if (track?.baseUrl) {
                             const captionResponse = await fetch(`${track.baseUrl}&fmt=json3`);
                             if (captionResponse.ok) {
-                                const captionJson = await captionResponse.json();
-                                youtubeCaptions = captionJson;
+                                youtubeCaptions = await captionResponse.json();
                             }
                         }
                     }
                 }
-            } catch (e) {
-                console.error("[API] Failed to fetch YouTube captions:", e);
+            } catch {
+                // YouTube captions are optional - ignore errors
             }
         }
 
         // Search LRClib for lyrics
+        let results = await searchLRClib(searchQuery);
 
-
-
-        const results = await searchLRClib(searchQuery);
-
-
-        if (results.length === 0) {
-            // Try searching with just track name
-            if (trackName && trackName !== title) {
-                const trackResults = await searchLRClib(trackName);
-
-                results.push(...trackResults);
-            }
+        if (results.length === 0 && trackName && trackName !== title) {
+            const trackResults = await searchLRClib(trackName);
+            results = trackResults;
         }
 
         if (results.length === 0) {
             return NextResponse.json({
                 videoDetails: { title, lengthSeconds },
                 captions: [],
-                error: "No synchronized lyrics found for this song"
+                youtubeCaptions,
+                error: "No synchronized lyrics found for this song",
             });
         }
 
-        // Pick the best match based on duration
         const bestMatch = pickBestMatch(results, lengthSeconds);
-        if (!bestMatch || !bestMatch.syncedLyrics) {
+        if (!bestMatch?.syncedLyrics) {
             return NextResponse.json({
                 videoDetails: { title, lengthSeconds },
                 captions: [],
-                error: "No synchronized lyrics found"
+                youtubeCaptions,
+                error: "No synchronized lyrics found",
             });
         }
 
-
-
-        // Parse LRC to segments
         const segments = parseLRCToSegments(bestMatch.syncedLyrics);
-
 
         return NextResponse.json({
             videoDetails: { title, lengthSeconds },
             captions: segments,
-            youtubeCaptions: youtubeCaptions,
+            youtubeCaptions,
             lrcMatch: {
                 artist: bestMatch.artistName,
                 track: bestMatch.trackName,
-            }
+            },
         });
-
     } catch (error) {
-        console.error("[API] Error:", error);
+        const message = error instanceof Error ? error.message : "Unknown error";
         return NextResponse.json(
-            { error: "Failed to fetch video info" },
+            { error: `Failed to fetch video info: ${message}` },
             { status: 500 }
         );
     }
