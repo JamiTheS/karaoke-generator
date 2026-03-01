@@ -40,6 +40,7 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
     onStateChange,
     onError,
     togglePlay,
+    play,
     seek,
     getCurrentTime,
     setVolume,
@@ -143,10 +144,12 @@ export default function KaraokePlayer({ videoId }: KaraokePlayerProps) {
   const showOverlay = !hasStarted && !displayError;
   const canStart = isReady;
 
+  // Use synchronous play() instead of async togglePlay() to preserve
+  // the user gesture chain on mobile (required for autoplay policy)
   const handleStart = useCallback(() => {
     setHasStarted(true);
-    togglePlay();
-  }, [togglePlay]);
+    play();
+  }, [play]);
 
   return (
     <div className="fixed inset-0 flex flex-col">

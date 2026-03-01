@@ -39,8 +39,8 @@ export default function LyricsDisplay({
   }
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 overflow-hidden min-h-[50vh] sm:min-h-[60vh] font-sans selection:bg-purple-500/30">
-      <div className="relative w-full max-w-6xl flex flex-col items-center justify-center h-[200px] sm:h-[300px]">
+    <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 overflow-hidden pb-40 sm:pb-32 font-sans selection:bg-purple-500/30">
+      <div className="relative w-full max-w-6xl flex flex-col items-center justify-center h-[250px] sm:h-[300px]">
         <AnimatePresence mode="popLayout" initial={false}>
           {currentLine && (
             <motion.div
@@ -70,7 +70,7 @@ export default function LyricsDisplay({
               }}
               className="absolute w-full flex items-center justify-center z-20 origin-center"
             >
-              <h1 className="text-center text-3xl sm:text-5xl md:text-7xl font-extrabold leading-tight tracking-tight px-2">
+              <h1 className="text-center text-2xl sm:text-5xl md:text-7xl font-extrabold leading-tight tracking-tight px-2">
                 {currentLine.text}
               </h1>
             </motion.div>
@@ -80,20 +80,20 @@ export default function LyricsDisplay({
             <motion.div
               key={nextLine.time}
               layoutId={nextLine.time.toString()}
-              initial={{ opacity: 0, y: 40 }}
+              initial={{ opacity: 0, y: 30 }}
               animate={{
                 opacity: 0.4,
-                y: 80, // Reduced from 100 for mobile
+                y: 60,
                 scale: 0.8,
                 filter: "blur(2px)",
                 color: "#94a3b8",
                 textShadow: "none"
               }}
-              exit={{ opacity: 0 }} // Should update to become current, handled by key change matching
+              exit={{ opacity: 0 }}
               transition={{ duration: 0.5 }}
               className="absolute w-full flex items-center justify-center z-10 origin-top"
             >
-              <p className="text-center text-xl sm:text-3xl md:text-4xl font-semibold px-4">
+              <p className="text-center text-base sm:text-3xl md:text-4xl font-semibold px-4">
                 {nextLine.text}
               </p>
             </motion.div>

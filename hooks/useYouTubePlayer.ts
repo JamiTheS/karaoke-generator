@@ -72,6 +72,17 @@ export function useYouTubePlayer() {
     }
   }, []);
 
+  // Direct play - no async state check, safe for mobile user gesture chain
+  const play = useCallback(() => {
+    if (!playerRef.current) return;
+    try {
+      playerRef.current.playVideo();
+      setIsPlaying(true);
+    } catch {
+      // Player not ready yet
+    }
+  }, []);
+
   const seek = useCallback((time: number) => {
     if (!playerRef.current) return;
     const clampedTime = Math.max(0, time);
@@ -107,6 +118,7 @@ export function useYouTubePlayer() {
     onStateChange,
     onError,
     togglePlay,
+    play,
     seek,
     getCurrentTime,
     setVolume,
